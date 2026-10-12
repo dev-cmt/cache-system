@@ -149,7 +149,7 @@
                                 @if(!empty($data->gallery_images) && is_array($data->gallery_images))
                                     @foreach($data->gallery_images as $photo)
                                         <div class="carousel-item">
-                                            <img src="{{ $photo ? asset($photo) : asset('frontEnd/images/no_image.png') }}" class="d-block w-100" alt="">
+                                            <img src="{{ $photo ? asset($photo) : asset('frontEnd/images/no_image.png') }}" class="d-block w-100" alt="" loading="lazy">
                                         </div>
                                     @endforeach
                                 @endif
@@ -263,7 +263,7 @@
                                                                        class="attr_checkbox d-none" {{$k==0?'checked':""}}>
                                                                 <label class="variant-option-btn mb-0 d-inline-flex align-items-center justify-content-center cursor-pointer" for="val_{{$key1}}_{{$key2}}">
                                                                     @if(!empty($attrImg))
-                                                                        <img src="{{ asset($attrImg) }}" class="variant-swatch-img mr-1" alt="{{$attrVal}}">
+                                                                        <img src="{{ asset($attrImg) }}" class="variant-swatch-img mr-1" alt="{{$attrVal}}" loading="lazy">
                                                                     @endif
                                                                     <span class="variant-text">{{$attrVal}}</span>
                                                                 </label>
@@ -853,7 +853,7 @@
                         <div class="col-md-2 col-6 main-product">
                             <div class="main-product-inner-wrapper text-center">
                                 <a href="{{route('product.details',[$item->slug,$item->id])}}">
-                                    <img src="{{$item->get_thumb ? asset($item->get_thumb->file_url): asset('frontEnd/images/no_image.png')}}" alt="{{$item->name}}">
+                                    <img src="{{$item->get_thumb ? asset($item->get_thumb->file_url): asset('frontEnd/images/no_image.png')}}" alt="{{$item->name}}" loading="lazy">
                                 </a>
                                 @if($item->sale_price != 0)
                                     <p class="mb-0" style="text-decoration: line-through;color: #b8b8b8">{{$web_settings->currency_sign}} {{$item->price}}</p>

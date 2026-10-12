@@ -31,10 +31,11 @@
                         <div class="d-flex align-items-center justify-content-between flex-wrap gap-3">
                             <div class="d-flex align-items-center">
                                 <a href="{{ route('product.details', [$product->slug, $product->id]) }}" class="mr-3">
-                                    <img src="{{ $product->get_thumb ? asset($product->get_thumb->file_url) : asset('frontEnd/images/no_image.png') }}" 
+                                     <img src="{{ $product->get_thumb ? asset($product->get_thumb->file_url) : asset('frontEnd/images/no_image.png') }}" 
                                          alt="{{ $product->name }}" 
                                          class="img-thumbnail rounded" 
-                                         style="width: 80px; height: 80px; object-fit: cover;">
+                                         style="width: 80px; height: 80px; object-fit: cover;"
+                                         loading="lazy">
                                 </a>
                                 <div>
                                     <h4 class="font-weight-bold text-dark mb-1">

@@ -18,7 +18,7 @@
     <link rel="stylesheet" href="{{asset('frontEnd/plugins/owl-carousel/owl.carousel.min.css')}}">
     <link rel="stylesheet" href="{{asset('frontEnd/plugins/owl-carousel/owl.theme.default.min.css')}}">
     {{--toastr--}}
-    <link rel="stylesheet" type="text/css" href="{{asset('/')}}backEnd/assets/vendor/toastr/toastr.min.css">
+    <link rel="stylesheet" type="text/css" href="{{asset('frontEnd/plugins/toastr/toastr.min.css')}}">
 
     <style>
         /* Global Lazy Loading Styles */
@@ -121,9 +121,8 @@
 
     {{--Owl-Carousel--}}
     <script src="{{asset('frontEnd/plugins/owl-carousel/owl.carousel.min.js')}}"></script>
-
     {{--toastr--}}
-    <script src="{{asset('/')}}backEnd/assets/vendor/toastr/toastr.min.js"></script>
+    <script src="{{asset('frontEnd/plugins/toastr/toastr.min.js')}}"></script>
     <script>
         @if(session()->has('success'))
             toastr.options = {

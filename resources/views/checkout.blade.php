@@ -164,7 +164,7 @@
                                                         $variantName = $item->attributes['variant'] ?? ($item->attributes->variant ?? null);
                                                     @endphp
                                                     <div class="d-flex align-items-center">
-                                                        <img width="45" height="45" style="object-fit: cover; border-radius: 4px; margin-right: 8px; border: 1px solid #e2e8f0;" src="{{ $itemImg ? asset($itemImg) : asset('frontEnd/images/no_image.png') }}" alt="{{ $item->name }}">
+                                                        <img width="45" height="45" style="object-fit: cover; border-radius: 4px; margin-right: 8px; border: 1px solid #e2e8f0;" src="{{ $itemImg ? asset($itemImg) : asset('frontEnd/images/no_image.png') }}" alt="{{ $item->name }}" loading="lazy">
                                                         <div>
                                                             <a style="font-size: 14px; font-weight: 600;"
                                                                href="{{route('product.details',[$item->associatedModel->slug,$item->associatedModel->id])}}">{{$item->name}}</a>

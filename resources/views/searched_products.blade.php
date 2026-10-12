@@ -40,7 +40,7 @@
                             <div class="col-md-2 col-6 main-product">
                                 <div class="main-product-inner-wrapper text-center">
                                     <a href="{{route('product.details',[$item->slug,$item->id])}}">
-                                        <img src="{{$item->get_thumb ? asset($item->get_thumb->file_url) : asset('frontEnd/images/no_image.png')}}" alt="{{$item->name}}">
+                                        <img src="{{$item->get_thumb ? asset($item->get_thumb->file_url) : asset('frontEnd/images/no_image.png')}}" alt="{{$item->name}}" loading="lazy">
                                     </a>
                                     @if($item->sale_price != 0)
                                         <p class="mb-0" style="text-decoration: line-through;color: #b8b8b8">{{$web_settings->currency_sign}} {{$item->price}}</p>
