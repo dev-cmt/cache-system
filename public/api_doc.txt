@@ -1,0 +1,486 @@
+http://127.0.0.1:8000/api/v1/app/categories/1
+--------------------------------------------------
+{
+    "success": true,
+    "data": [
+        {
+            "id": 1,
+            "parent_id": null,
+            "name": "Girl's Shows",
+            "slug": "girls-shows",
+            "is_menu": false,
+            "is_home": false,
+            "is_section": false,
+            "is_footer": false,
+            "status": true,
+            "image": null,
+            "children": [
+                {
+                    "id": 2,
+                    "parent_id": 1,
+                    "name": "Inner",
+                    "slug": "inner",
+                    "status": true,
+                    "is_menu": false,
+                    "is_home": false,
+                    "is_section": false,
+                    "is_footer": false,
+                    "store_ids": [
+                        "1",
+                        "2",
+                        "3"
+                    ],
+                    "created_at": "2026-02-12T15:53:36.000000Z",
+                    "updated_at": "2026-09-23T09:36:17.000000Z",
+                    "image": null
+                }
+            ]
+        },
+        {
+            "id": 3,
+            "parent_id": null,
+            "name": "Health and beauty",
+            "slug": "health-and-beauty",
+            "is_menu": false,
+            "is_home": false,
+            "is_section": false,
+            "is_footer": false,
+            "status": true,
+            "image": "http://127.0.0.1:8000/uploads/category/istockphoto-497534880-612x612_6aa276597d617.webp",
+            "children": []
+        }
+    ]
+}
+
+
+
+http://127.0.0.1:8000/api/v1/app/sliders/1
+----------------------------------------------
+{
+    "success": true,
+    "data": [
+        {
+            "id": 1,
+            "desktop_image": "uploads/home-slides/desktop/istockphoto-497534880-612x612_6aa50b2040b83.webp",
+            "mobile_image": "uploads/home-slides/mobile/stitchman-banner-2_6aa50b204f477.webp",
+            "offer_text": "25 % OFF",
+            "title": "sdtgeww",
+            "details": "tef",
+            "button_text": "Shop Now",
+            "button_url": "sdfsdfsd",
+            "sort_order": 0
+        }
+    ]
+}
+
+
+http://127.0.0.1:8000/api/v1/app/store/1
+--------------------------------------------
+{
+    "success": true,
+    "data": {
+        "id": 1,
+        "type": 2,
+        "name": "Milano BD",
+        "logo": "uploads/stores/6821fcff47efa.png",
+        "color": "bg-danger",
+        "contact_person": "Limon",
+        "phone": "0123456789",
+        "address": null,
+        "status": 1,
+        "base_url": "https://demo.prodevsltd.xyz",
+        "invoice_prefix": "MLN",
+        "fb_pixels": [
+            {
+                "pixel_id": "759876545848335",
+                "access_token": "",
+                "status": "0"
+            }
+        ],
+        "google_trackings": [
+            {
+                "tracking_id": "GTM-PDGW9227",
+                "status": "1"
+            }
+        ]
+    }
+}
+
+http://127.0.0.1:8000/api/v1/app/sliders/1
+-------------------------------------------
+{
+    "success": true,
+    "data": [
+        {
+            "id": 1,
+            "desktop_image": "uploads/home-slides/desktop/istockphoto-497534880-612x612_6aa50b2040b83.webp",
+            "mobile_image": "uploads/home-slides/mobile/stitchman-banner-2_6aa50b204f477.webp",
+            "offer_text": "25 % OFF",
+            "title": "sdtgeww",
+            "details": "tef",
+            "button_text": "Shop Now",
+            "button_url": "sdfsdfsd",
+            "sort_order": 0
+        }
+    ]
+}
+
+
+
+http://127.0.0.1:8000/api/v1/app/shipping-methods/1
+------------------------------------------------------
+{
+    "success": true,
+    "data": [
+        {
+            "id": 1,
+            "store_id": null,
+            "type": "inside_dhaka",
+            "name": "Inside Dhaka Standard",
+            "amount": 70,
+            "status": 1
+        },
+        {
+            "id": 2,
+            "store_id": null,
+            "type": "outside_dhaka",
+            "name": "Outside Dhaka Standard",
+            "amount": 130,
+            "status": 1
+        }
+    ]
+}
+
+
+
+
+
+{
+    "success": true,
+    "data": [
+        {
+            "id": 270,
+            "parent_id": null,
+            "category_ids": [
+                "1",
+                "3"
+            ],
+            "store_ids": [
+                1,
+                3
+            ],
+            "name": "Combo Product",
+            "slug": "combo-product",
+            "sku": "motiurs",
+            "image": null,
+            "hover_image": null,
+            "image_gallery": [],
+            "has_variant": 0,
+            "choice_attributes": null,
+            "regular_price": "2800.0000",
+            "sale_price": "2800.0000",
+            "total_stock": 0,
+            "alert_quantity": 5,
+            "combo_products": "[\"268\"]",
+            "delivery_text": null,
+            "product_tag": "",
+            "position": 0,
+            "free_shipping": false,
+            "related_products": [
+                357,
+                383,
+                458
+            ],
+            "status": 1,
+            "categories": [
+                {
+                    "id": 1,
+                    "name": "Girl's Shows",
+                    "slug": "girls-shows",
+                    "image": null
+                },
+                {
+                    "id": 3,
+                    "name": "Health and beauty",
+                    "slug": "health-and-beauty",
+                    "image": "http://127.0.0.1:8000/uploads/category/istockphoto-497534880-612x612_6aa276597d617.webp"
+                }
+            ],
+            "attributes": [],
+            "get_product_attributes": [],
+            "get_category": {
+                "id": 1,
+                "name": "Girl's Shows",
+                "slug": "girls-shows",
+                "image": null
+            }
+        },
+        {
+            "id": 268,
+            "parent_id": null,
+            "category_ids": [
+                "3"
+            ],
+            "store_ids": [
+                "1",
+                "2",
+                "3"
+            ],
+            "name": "Single Product",
+            "slug": "single-product",
+            "sku": "sp",
+            "image": "uploads/img-6ab8ac8b330c4336971384_6abba1fadbaf4.webp",
+            "hover_image": null,
+            "image_gallery": [],
+            "has_variant": 0,
+            "choice_attributes": "[]",
+            "regular_price": "2800.0000",
+            "sale_price": "2800.0000",
+            "total_stock": 16,
+            "alert_quantity": 5,
+            "combo_products": null,
+            "delivery_text": "100% Delivery Charge Free",
+            "product_tag": "",
+            "position": 0,
+            "free_shipping": false,
+            "related_products": [],
+            "status": 1,
+            "categories": [
+                {
+                    "id": 3,
+                    "name": "Health and beauty",
+                    "slug": "health-and-beauty",
+                    "image": "http://127.0.0.1:8000/uploads/category/istockphoto-497534880-612x612_6aa276597d617.webp"
+                }
+            ],
+            "attributes": [],
+            "get_product_attributes": [],
+            "get_category": {
+                "id": 3,
+                "name": "Health and beauty",
+                "slug": "health-and-beauty",
+                "image": "http://127.0.0.1:8000/uploads/category/istockphoto-497534880-612x612_6aa276597d617.webp"
+            }
+        },
+        {
+            "id": 267,
+            "parent_id": null,
+            "category_ids": [
+                "2"
+            ],
+            "store_ids": [
+                "1",
+                "3"
+            ],
+            "name": "Vintage pearl shoes thick heels",
+            "slug": "vintage-pearl-shoes-thick-heels",
+            "sku": "vpsth",
+            "image": "uploads/66c9ab3ea9768_800x800.jpeg",
+            "hover_image": null,
+            "image_gallery": [
+                "ims_01/public/uploads/6aa68ade00f18.png",
+                "ims_01/public/uploads/6aa77a1f443ce.png"
+            ],
+            "has_variant": 1,
+            "choice_attributes": "[{\"attribute_id\":1,\"values\":{\"27\":\"grey\"}},{\"attribute_id\":3,\"values\":{\"24\":\"41\"}}]",
+            "regular_price": "1880.0000",
+            "sale_price": "1880.0000",
+            "total_stock": 10,
+            "alert_quantity": 5,
+            "combo_products": null,
+            "delivery_text": null,
+            "product_tag": "",
+            "position": 0,
+            "free_shipping": false,
+            "related_products": [],
+            "status": 1,
+            "categories": [
+                {
+                    "id": 2,
+                    "name": "Inner",
+                    "slug": "inner",
+                    "image": null
+                }
+            ],
+            "attributes": [
+                {
+                    "attribute_id": 3,
+                    "attribute_name": "Shoe Size",
+                    "has_image": false,
+                    "values": [
+                        {
+                            "id": 24,
+                            "name": "41",
+                            "image": null
+                        }
+                    ]
+                },
+                {
+                    "attribute_id": 1,
+                    "attribute_name": "Color",
+                    "has_image": true,
+                    "values": [
+                        {
+                            "id": 27,
+                            "name": "grey",
+                            "image": "uploads/1765344045-download-2_6abba306c3a38.webp"
+                        }
+                    ]
+                }
+            ],
+            "get_product_attributes": [
+                {
+                    "id": 1819,
+                    "product_id": 267,
+                    "attribute_item_ids": "[\"24\",\"27\"]",
+                    "variant_sku": "vpsth-grey-41",
+                    "variant_code": "14867-25246650",
+                    "variant_image": "uploads/1765344045-download-2_6abba306c3a38.webp",
+                    "variant_purchase_cost": "0.0000",
+                    "variant_price": "1880.0000",
+                    "variant_wholesale_price": null,
+                    "variant_stock": 10,
+                    "created_at": "2026-09-29T11:34:26.000000Z",
+                    "updated_at": "2026-10-03T10:18:53.000000Z",
+                    "image": "uploads/1765344045-download-2_6abba306c3a38.webp",
+                    "item_code": "14867-25246650"
+                }
+            ],
+            "get_category": {
+                "id": 2,
+                "name": "Inner",
+                "slug": "inner",
+                "image": null
+            }
+        }
+    ]
+}
+
+http://127.0.0.1:8000/api/v1/app/product-description/607
+--------------------------------------------------------
+{
+    "success": true,
+    "description": {
+        "id": 607,
+        "name": "2 pcs QuickGear Men’s Double Layer Shorts Black&Olive",
+        "description": "<h2 style=\"margin: 0px 0px 0.5rem; padding: 0px; line-height: 1.2; font-size: 2rem; font-family: sans-serif; color: rgb(33, 37, 41);\"><font face=\"Arial Black\" style=\"margin: 0px; padding: 0px;\">QuickGear Men’s Double Layer Shorts</font><br style=\"margin: 0px; padding: 0px;\"><font face=\"Arial Black\" style=\"margin: 0px; padding: 0px;\"><br style=\"margin: 0px; padding: 0px;\"></font></h2>"
+    }
+}
+
+http://127.0.0.1:8000/api/v1/app/reviews/1
+---------------------------------------------
+{
+    "success": true,
+    "data": [
+        {
+            "id": 4,
+            "store_id": 1,
+            "product_id": 267,
+            "name": "Motiur Rahman",
+            "email": "motiur.cmt@gmail.com",
+            "rating": 4,
+            "summary": "Tesd fdsf",
+            "status": 1,
+            "image": [
+                "uploads/reviews/1790153542_6ab393469f642.jpg",
+                "uploads/reviews/1790153542_6ab393469fb96.jpg"
+            ],
+            "created_at": "2026-09-23T08:52:22.000000Z",
+            "updated_at": "2026-09-23T09:04:28.000000Z",
+            "get_product": {
+                "id": 267,
+                "name": "Vintage pearl shoes thick heels"
+            }
+        },
+        {
+            "id": 3,
+            "store_id": 1,
+            "product_id": 267,
+            "name": "Motiur Rahman",
+            "email": "motiur.cmt@gmail.com",
+            "rating": 5,
+            "summary": "ert afsdafs",
+            "status": 1,
+            "image": [
+                "uploads/reviews/1790153111_6ab391972a798.jpg",
+                "uploads/reviews/1790153111_6ab391972ad33.jpeg"
+            ],
+            "created_at": "2026-09-23T08:45:11.000000Z",
+            "updated_at": "2026-09-23T08:52:47.000000Z",
+            "get_product": {
+                "id": 267,
+                "name": "Vintage pearl shoes thick heels"
+            }
+        },
+        {
+            "id": 2,
+            "store_id": 1,
+            "product_id": 267,
+            "name": "Motiur Rahman",
+            "email": "motiur.cmt@gmail.com",
+            "rating": 5,
+            "summary": "tewafdsa fsd f",
+            "status": 1,
+            "image": null,
+            "created_at": "2026-09-23T08:44:44.000000Z",
+            "updated_at": "2026-09-23T09:04:22.000000Z",
+            "get_product": {
+                "id": 267,
+                "name": "Vintage pearl shoes thick heels"
+            }
+        },
+        {
+            "id": 1,
+            "store_id": 1,
+            "product_id": 267,
+            "name": "Motiur Rahman",
+            "email": "motiur.cmt@gmail.com",
+            "rating": 5,
+            "summary": "tsfsdf",
+            "status": 1,
+            "image": null,
+            "created_at": "2026-09-23T08:37:07.000000Z",
+            "updated_at": "2026-09-23T09:04:26.000000Z",
+            "get_product": {
+                "id": 267,
+                "name": "Vintage pearl shoes thick heels"
+            }
+        }
+    ]
+}
+
+
+http://127.0.0.1:8000/api/v1/app/pages/1
+-------------------------------------------
+{
+    "success": true,
+    "data": [
+        {
+            "id": 2,
+            "store_id": 1,
+            "title": "About Us",
+            "slug": "about-us",
+            "content": null,
+            "status": 1,
+            "created_at": "2026-10-07T08:21:35.000000Z",
+            "updated_at": "2026-10-07T08:21:35.000000Z"
+        }
+    ]
+}
+
+
+http://127.0.0.1:8000/api/v1/app/page/1/about-us
+-------------------------------------------------
+{
+    "success": true,
+    "data": {
+        "id": 2,
+        "store_id": 1,
+        "title": "About Us",
+        "slug": "about-us",
+        "content": null,
+        "status": 1,
+        "created_at": "2026-10-07T08:21:35.000000Z",
+        "updated_at": "2026-10-07T08:21:35.000000Z"
+    }
+}
