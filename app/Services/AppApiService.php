@@ -14,13 +14,20 @@ use Illuminate\Pagination\LengthAwarePaginator;
 /**
  * AppApiService
  *
- * Simple API client for store, products, categories, sliders, and shipping.
+ * High-performance API client for store, products, categories, sliders, and shipping
+ * with multi-tier in-memory (runtime) and persistent caching.
  */
 class AppApiService
 {
     protected string $baseUrl;
     protected int    $storeId;
     protected int    $cacheTtl = 86400; // 24 hours
+
+    /**
+     * In-memory request-level cache to eliminate duplicate cache reads and
+     * redundant calculations during a single HTTP request lifecycle.
+     */
+    protected static array $runtimeCache = [];
 
     public function __construct()
     {
@@ -32,6 +39,7 @@ class AppApiService
     {
         try {
             Cache::flush();
+            self::$runtimeCache = [];
             return true;
         } catch (\Throwable $e) {
             Log::error("AppApiService clearCache error: {$e->getMessage()}");
@@ -54,17 +62,31 @@ class AppApiService
 
     public function getStore(?int $storeId = null): ?array
     {
-        $res = $this->cachedRequest('/api/v1/app/store/' . ($storeId ?? $this->storeId));
-        if (!$res || empty($res['success']) || empty($res['data'])) return null;
+        $id = $storeId ?? $this->storeId;
+        $runtimeKey = "store_{$id}";
+        if (isset(self::$runtimeCache[$runtimeKey])) {
+            return self::$runtimeCache[$runtimeKey];
+        }
 
-        $store = $res['data'];
-        $store['logo_url'] = $this->resolveMediaUrl($store['logo'] ?? null, $this->baseUrl ?? null);
+        $cacheKey = "api_store_mapped_{$id}";
+
+        $store = Cache::remember($cacheKey, $this->cacheTtl, function () use ($id) {
+            $res = $this->cachedRequest('/api/v1/app/store/' . $id);
+            if (!$res || empty($res['success']) || empty($res['data'])) return null;
+
+            $s = $res['data'];
+            $s['logo_url'] = $this->resolveMediaUrl($s['logo'] ?? null, $this->baseUrl ?? null);
+            return $s;
+        });
+
+        self::$runtimeCache[$runtimeKey] = $store;
         return $store;
     }
 
     public function getPage(string $slug, ?int $storeId = null): ?array
     {
-        $res = $this->cachedRequest('/api/v1/app/page/' . ($storeId ?? $this->storeId) . '/' . rawurlencode($slug));
+        $id = $storeId ?? $this->storeId;
+        $res = $this->cachedRequest('/api/v1/app/page/' . $id . '/' . rawurlencode($slug));
 
         if (!$res || !is_array($res['data'] ?? null)) {
             return null;
@@ -75,96 +97,138 @@ class AppApiService
 
     public function getSliders(?int $storeId = null): array
     {
-        $res = $this->cachedRequest('/api/v1/app/sliders/' . ($storeId ?? $this->storeId));
-        if (!$res || empty($res['success']) || empty($res['data'])) return [];
+        $id = $storeId ?? $this->storeId;
+        $runtimeKey = "sliders_{$id}";
+        if (isset(self::$runtimeCache[$runtimeKey])) {
+            return self::$runtimeCache[$runtimeKey];
+        }
 
-        return array_map(function (array $s) {
-            $img = $this->resolveMediaUrl($s['desktop_image'] ?? $s['mobile_image'] ?? null);
-            return (object) [
-                'id'            => $s['id'] ?? null,
-                'desktop_image' => $this->resolveMediaUrl($s['desktop_image'] ?? null),
-                'mobile_image'  => $this->resolveMediaUrl($s['mobile_image'] ?? null),
-                'offer_text'    => $s['offer_text'] ?? null,
-                'title'         => $s['title'] ?? null,
-                'details'       => $s['details'] ?? null,
-                'button_text'   => $s['button_text'] ?? null,
-                'button_url'    => $s['button_url'] ?? null,
-                'slider_url'    => $s['button_url'] ?? null,
-                'sort_order'    => (int) ($s['sort_order'] ?? 0),
-                'image_url'     => $img,
-                'image'         => $img,
-                'get_img'       => $img ? (object) ['file_url' => $img] : null,
-            ];
-        }, $res['data']);
+        $cacheKey = "api_sliders_mapped_{$id}";
+
+        $sliders = Cache::remember($cacheKey, $this->cacheTtl, function () use ($id) {
+            $res = $this->cachedRequest('/api/v1/app/sliders/' . $id);
+            if (!$res || empty($res['success']) || empty($res['data'])) return [];
+
+            return array_map(function (array $s) {
+                $img = $this->resolveMediaUrl($s['desktop_image'] ?? $s['mobile_image'] ?? null);
+                return (object) [
+                    'id'            => $s['id'] ?? null,
+                    'desktop_image' => $this->resolveMediaUrl($s['desktop_image'] ?? null),
+                    'mobile_image'  => $this->resolveMediaUrl($s['mobile_image'] ?? null),
+                    'offer_text'    => $s['offer_text'] ?? null,
+                    'title'         => $s['title'] ?? null,
+                    'details'       => $s['details'] ?? null,
+                    'button_text'   => $s['button_text'] ?? null,
+                    'button_url'    => $s['button_url'] ?? null,
+                    'slider_url'    => $s['button_url'] ?? null,
+                    'sort_order'    => (int) ($s['sort_order'] ?? 0),
+                    'image_url'     => $img,
+                    'image'         => $img,
+                    'get_img'       => $img ? (object) ['file_url' => $img] : null,
+                ];
+            }, $res['data']);
+        });
+
+        self::$runtimeCache[$runtimeKey] = $sliders;
+        return $sliders;
+    }
+
+    /**
+     * Map category fallback images across all products in a single pass.
+     */
+    protected function getCategoryFallbackImagesMap(int $storeId): array
+    {
+        $res = $this->cachedRequest("/api/v1/app/products/{$storeId}");
+        $items = isset($res['data']['data']) ? $res['data']['data'] : ($res['data'] ?? []);
+        $map = [];
+        if (is_array($items)) {
+            foreach ($items as $p) {
+                if (empty($p['image'])) continue;
+                $ids = is_string($p['category_ids'] ?? null) ? json_decode($p['category_ids'], true) : ($p['category_ids'] ?? []);
+                $img = $this->resolveMediaUrl($p['image']);
+                foreach ((array) $ids as $cid) {
+                    $cidInt = (int) $cid;
+                    if (!isset($map[$cidInt])) {
+                        $map[$cidInt] = $img;
+                    }
+                }
+            }
+        }
+        return $map;
+    }
+
+    public function findCategoryFallbackImage(int $catId, int $storeId): ?string
+    {
+        $map = $this->getCategoryFallbackImagesMap($storeId);
+        return $map[$catId] ?? null;
     }
 
     public function getCategories(?int $storeId = null): array
     {
-        $id  = $storeId ?? $this->storeId;
-        $res = $this->cachedRequest("/api/v1/app/categories/{$id}");
-        if (!$res || empty($res['success']) || empty($res['data'])) return [];
-
-        $mapChild = function (array $c): object {
-            $img = $this->resolveMediaUrl($c['image'] ?? null);
-            return (object) [
-                'id'            => (int) ($c['id'] ?? 0),
-                'parent_id'     => $c['parent_id'] ?? null,
-                'name'          => $c['name'] ?? '',
-                'category_name' => $c['name'] ?? '',
-                'slug'          => $c['slug'] ?? '',
-                'is_menu'       => (bool) ($c['is_menu'] ?? false),
-                'is_home'       => (bool) ($c['is_home'] ?? false),
-                'is_section'    => (bool) ($c['is_section'] ?? false),
-                'is_footer'     => (bool) ($c['is_footer'] ?? false),
-                'status'        => (bool) ($c['status'] ?? true),
-                'image'         => $img,
-                'image_url'     => $img,
-                'get_image'     => $img ? (object) ['file_url' => $img] : null,
-                'get_thumb'     => $img ? (object) ['file_url' => $img] : null,
-                'children'      => collect([]),
-            ];
-        };
-
-        return array_map(function (array $c) use ($id, $mapChild) {
-            $img = $this->resolveMediaUrl($c['image'] ?? null) ?: $this->findCategoryFallbackImage((int) ($c['id'] ?? 0), $id);
-
-            // Map raw children arrays → objects, then wrap in a Collection
-            $children = collect(array_map($mapChild, $c['children'] ?? []));
-
-            return (object) [
-                'id'            => (int) ($c['id'] ?? 0),
-                'parent_id'     => $c['parent_id'] ?? null,
-                'name'          => $c['name'] ?? '',
-                'category_name' => $c['name'] ?? '',
-                'slug'          => $c['slug'] ?? '',
-                'is_menu'       => (bool) ($c['is_menu'] ?? false),
-                'is_home'       => (bool) ($c['is_home'] ?? false),
-                'is_section'    => (bool) ($c['is_section'] ?? false),
-                'is_footer'     => (bool) ($c['is_footer'] ?? false),
-                'status'        => (bool) ($c['status'] ?? true),
-                'image'         => $img,
-                'image_url'     => $img,
-                'get_image'     => $img ? (object) ['file_url' => $img] : null,
-                'get_thumb'     => $img ? (object) ['file_url' => $img] : null,
-                'children'      => $children,
-                '_products'     => collect([]),
-            ];
-        }, $res['data']);
-    }
-
-    protected function findCategoryFallbackImage(int $catId, int $storeId): ?string
-    {
-        $res   = $this->cachedRequest("/api/v1/app/products/{$storeId}", ['page' => 1]);
-        $items = isset($res['data']['data']) ? $res['data']['data'] : ($res['data'] ?? []);
-        if (is_array($items)) {
-            foreach ($items as $p) {
-                $ids = is_string($p['category_ids'] ?? null) ? json_decode($p['category_ids'], true) : ($p['category_ids'] ?? []);
-                if (in_array((string) $catId, array_map('strval', (array) $ids)) && !empty($p['image'])) {
-                    return $this->resolveMediaUrl($p['image']);
-                }
-            }
+        $id = $storeId ?? $this->storeId;
+        $runtimeKey = "categories_{$id}";
+        if (isset(self::$runtimeCache[$runtimeKey])) {
+            return self::$runtimeCache[$runtimeKey];
         }
-        return null;
+
+        $cacheKey = "api_categories_processed_{$id}";
+
+        $categories = Cache::remember($cacheKey, $this->cacheTtl, function () use ($id) {
+            $res = $this->cachedRequest("/api/v1/app/categories/{$id}");
+            if (!$res || empty($res['success']) || empty($res['data'])) return [];
+
+            $fallbackImages = $this->getCategoryFallbackImagesMap($id);
+
+            $mapChild = function (array $c): object {
+                $img = $this->resolveMediaUrl($c['image'] ?? null);
+                return (object) [
+                    'id'            => (int) ($c['id'] ?? 0),
+                    'parent_id'     => $c['parent_id'] ?? null,
+                    'name'          => $c['name'] ?? '',
+                    'category_name' => $c['name'] ?? '',
+                    'slug'          => $c['slug'] ?? '',
+                    'is_menu'       => (bool) ($c['is_menu'] ?? false),
+                    'is_home'       => (bool) ($c['is_home'] ?? false),
+                    'is_section'    => (bool) ($c['is_section'] ?? false),
+                    'is_footer'     => (bool) ($c['is_footer'] ?? false),
+                    'status'        => (bool) ($c['status'] ?? true),
+                    'image'         => $img,
+                    'image_url'     => $img,
+                    'get_image'     => $img ? (object) ['file_url' => $img] : null,
+                    'get_thumb'     => $img ? (object) ['file_url' => $img] : null,
+                    'children'      => collect([]),
+                ];
+            };
+
+            return array_map(function (array $c) use ($id, $mapChild, $fallbackImages) {
+                $cid = (int) ($c['id'] ?? 0);
+                $img = $this->resolveMediaUrl($c['image'] ?? null) ?: ($fallbackImages[$cid] ?? null);
+
+                $children = collect(array_map($mapChild, $c['children'] ?? []));
+
+                return (object) [
+                    'id'            => $cid,
+                    'parent_id'     => $c['parent_id'] ?? null,
+                    'name'          => $c['name'] ?? '',
+                    'category_name' => $c['name'] ?? '',
+                    'slug'          => $c['slug'] ?? '',
+                    'is_menu'       => (bool) ($c['is_menu'] ?? false),
+                    'is_home'       => (bool) ($c['is_home'] ?? false),
+                    'is_section'    => (bool) ($c['is_section'] ?? false),
+                    'is_footer'     => (bool) ($c['is_footer'] ?? false),
+                    'status'        => (bool) ($c['status'] ?? true),
+                    'image'         => $img,
+                    'image_url'     => $img,
+                    'get_image'     => $img ? (object) ['file_url' => $img] : null,
+                    'get_thumb'     => $img ? (object) ['file_url' => $img] : null,
+                    'children'      => $children,
+                    '_products'     => collect([]),
+                ];
+            }, $res['data']);
+        });
+
+        self::$runtimeCache[$runtimeKey] = $categories;
+        return $categories;
     }
 
     public function getCategoryById(int $id, ?int $storeId = null): ?object
@@ -175,29 +239,113 @@ class AppApiService
         return null;
     }
 
+    /**
+     * Fetch, map, and cache ALL products for the store once.
+     * Builds instant O(1) hash maps by ID and by Slug.
+     */
+    public function getAllMappedProducts(?int $storeId = null): array
+    {
+        $id = $storeId ?? $this->storeId;
+        $runtimeKey = "mapped_products_{$id}";
+        if (isset(self::$runtimeCache[$runtimeKey])) {
+            return self::$runtimeCache[$runtimeKey];
+        }
+
+        $cacheKey = "api_products_mapped_all_{$id}";
+
+        $products = Cache::remember($cacheKey, $this->cacheTtl, function () use ($id) {
+            $res = $this->cachedRequest("/api/v1/app/products/{$id}");
+            if (!$res || empty($res['success']) || !isset($res['data'])) {
+                return [];
+            }
+            $items = isset($res['data']['data']) ? $res['data']['data'] : ($res['data'] ?? []);
+            if (!is_array($items)) return [];
+
+            // Pre-build category dictionary so mapProduct avoids recursive calls
+            $catMap = [];
+            foreach ($this->getCategories($id) as $c) {
+                $catMap[(string) $c->id] = [
+                    'id'            => $c->id,
+                    'category_name' => $c->name ?? $c->category_name ?? '',
+                    'name'          => $c->name ?? $c->category_name ?? '',
+                    'slug'          => $c->slug ?? '',
+                    'image'         => $c->image ?? null,
+                ];
+            }
+
+            return array_map(function ($item) use ($catMap) {
+                return $this->mapProduct($item, $catMap);
+            }, $items);
+        });
+
+        // Index in runtime memory for instant lookups
+        foreach ($products as $item) {
+            self::$runtimeCache["prod_by_id_{$id}_{$item->id}"] = $item;
+            if (!empty($item->slug)) {
+                self::$runtimeCache["prod_by_slug_{$id}_{$item->slug}"] = $item;
+            }
+        }
+
+        self::$runtimeCache[$runtimeKey] = $products;
+        return $products;
+    }
+
+    public function getProductById(int $id, ?int $storeId = null): ?object
+    {
+        $storeId = $storeId ?? $this->storeId;
+        $key = "prod_by_id_{$storeId}_{$id}";
+        if (isset(self::$runtimeCache[$key])) {
+            return self::$runtimeCache[$key];
+        }
+
+        $this->getAllMappedProducts($storeId);
+
+        return self::$runtimeCache[$key] ?? null;
+    }
+
+    public function getProductBySlugId(string $slug, int $id, ?int $storeId = null): ?object
+    {
+        $storeId = $storeId ?? $this->storeId;
+
+        // O(1) Lookup by ID
+        if ($id > 0) {
+            $item = $this->getProductById($id, $storeId);
+            if ($item) return $item;
+        }
+
+        // O(1) Lookup by Slug
+        if ($slug !== '') {
+            $slugKey = "prod_by_slug_{$storeId}_{$slug}";
+            if (isset(self::$runtimeCache[$slugKey])) {
+                return self::$runtimeCache[$slugKey];
+            }
+
+            $this->getAllMappedProducts($storeId);
+            if (isset(self::$runtimeCache[$slugKey])) {
+                return self::$runtimeCache[$slugKey];
+            }
+        }
+
+        return null;
+    }
+
     public function getProducts(?int $storeId = null, int $page = 1, array $extra = []): LengthAwarePaginator
     {
-        $id      = $storeId ?? $this->storeId;
-        $perPage = 28;
-        $query   = array_merge(['page' => $page, 'per_page' => $perPage, 'limit' => $perPage], $extra);
-        $res     = $this->cachedRequest("/api/v1/app/products/{$id}", $query);
+        $id  = $storeId ?? $this->storeId;
+        $all = $this->getAllMappedProducts($id);
 
-        $d = $res['data'] ?? [];
-        if (isset($d['data']) && is_array($d['data'])) {
-            $items    = array_map([$this, 'mapProduct'], $d['data']);
-            $total    = (int) ($d['total'] ?? count($items));
-            $perPage  = (int) ($d['per_page'] ?? $perPage);
-            $currPage = (int) ($d['current_page'] ?? $page);
-        } elseif (is_array($d) && !empty($d)) {
-            $all      = array_map([$this, 'mapProduct'], $d);
-            $total    = count($all);
-            $items    = array_slice($all, ($page - 1) * $perPage, $perPage);
-            $currPage = $page;
-        } else {
-            $items    = [];
-            $total    = 0;
-            $currPage = $page;
+        if (!empty($extra['category_id'])) {
+            $catIdStr = (string) $extra['category_id'];
+            $all = array_values(array_filter($all, function ($p) use ($catIdStr) {
+                $cids = array_map('strval', (array) ($p->category_ids ?? []));
+                return in_array($catIdStr, $cids, true);
+            }));
         }
+
+        $perPage  = (int) ($extra['per_page'] ?? 28);
+        $total    = count($all);
+        $items    = array_slice($all, max(0, ($page - 1) * $perPage), $perPage);
+        $currPage = $page;
 
         return new LengthAwarePaginator($items, $total, $perPage, $currPage, [
             'path'     => Paginator::resolveCurrentPath(),
@@ -207,35 +355,22 @@ class AppApiService
 
     public function getProductsByCategory(int $catId, ?int $storeId = null, int $page = 1): LengthAwarePaginator
     {
-        // Try API-side category filter first
-        $res = $this->getProducts($storeId, $page, ['category_id' => $catId]);
+        $id = $storeId ?? $this->storeId;
+        $cacheKey = "api_cat_items_{$id}_{$catId}";
 
-        // If API returned a non-empty response, check whether the results are
-        // actually filtered. If total < full-catalogue size we trust the API.
-        // Otherwise fall through to local filtering.
-        $allPage1 = $this->getProducts($storeId, 1);
-        $fullTotal = $allPage1->total();
-        if ($res->count() > 0 && $res->total() < $fullTotal) {
-            return $res;
-        }
+        $matched = Cache::remember($cacheKey, $this->cacheTtl, function () use ($id, $catId) {
+            $all = $this->getAllMappedProducts($id);
+            $catIdStr = (string) $catId;
 
-        // Fallback: scan all pages and filter by category_ids locally
-        $matched = [];
-        for ($p = 1; $p <= 50; $p++) {
-            $pag = $this->getProducts($storeId, $p);
-            if ($pag->count() === 0) break;
-            foreach ($pag->items() as $item) {
+            return array_values(array_filter($all, function ($item) use ($catIdStr) {
                 $catIds = array_map('strval', (array) ($item->category_ids ?? []));
-                if (in_array((string) $catId, $catIds, true)) {
-                    $matched[] = $item;
-                }
-            }
-            if ($pag->currentPage() >= $pag->lastPage()) break;
-        }
+                return in_array($catIdStr, $catIds, true);
+            }));
+        });
 
         $perPage = 20;
         $total   = count($matched);
-        $items   = array_slice($matched, ($page - 1) * $perPage, $perPage);
+        $items   = array_slice($matched, max(0, ($page - 1) * $perPage), $perPage);
 
         return new LengthAwarePaginator($items, $total, $perPage, $page, [
             'path'     => Paginator::resolveCurrentPath(),
@@ -245,67 +380,55 @@ class AppApiService
 
     public function searchProducts(string $keyword, ?int $storeId = null, int $page = 1, ?int $categoryId = null): LengthAwarePaginator
     {
+        $id = $storeId ?? $this->storeId;
         $keyword = trim($keyword);
+        $cacheKey = 'api_search_' . $id . '_' . ($categoryId ?? 'all') . '_' . md5(mb_strtolower($keyword));
 
-        // ── 1. Try API-side search (API may support q/search/category_id) ──────
-        if ($keyword !== '') {
-            $extra = ['q' => $keyword, 'search' => $keyword, 'keyword' => $keyword, 'name' => $keyword];
-            if ($categoryId) $extra['category_id'] = $categoryId;
-            $res = $this->getProducts($storeId, $page, $extra);
+        $matched = Cache::remember($cacheKey, $this->cacheTtl, function () use ($id, $keyword, $categoryId) {
+            $all = $this->getAllMappedProducts($id);
+            $words = $keyword !== '' ? array_filter(explode(' ', mb_strtolower($keyword))) : [];
 
-            // Accept API result only if it is narrower than the full catalogue
-            $allPage1  = $this->getProducts($storeId, 1);
-            $fullTotal = $allPage1->total();
-            if ($res->count() > 0 && $res->total() < $fullTotal) {
-                return $res;
-            }
-        }
-
-        // ── 2. Local full-catalogue scan ─────────────────────────────────────
-        // Split keyword into words for partial / any-word matching
-        $words = $keyword !== '' ? array_filter(explode(' ', mb_strtolower($keyword))) : [];
-
-        $matched = [];
-        for ($p = 1; $p <= 50; $p++) {
-            $pag = $this->getProducts($storeId, $p);
-            if ($pag->count() === 0) break;
-            foreach ($pag->items() as $item) {
-                // ── Category filter ──────────────────────────────────────────
+            $filtered = [];
+            foreach ($all as $item) {
                 if ($categoryId !== null) {
                     $catIds = array_map('strval', (array) ($item->category_ids ?? []));
                     if (!in_array((string) $categoryId, $catIds, true)) continue;
                 }
-                // ── Keyword filter ───────────────────────────────────────────
+
                 if (empty($words)) {
-                    // No keyword: category-only browse → include all
-                    $matched[] = $item;
+                    $filtered[] = $item;
                     continue;
                 }
+
                 $haystack = mb_strtolower($item->name . ' ' . $item->slug . ' ' . ($item->description ?? '') . ' ' . ($item->product_tag ?? ''));
-                // Match if ANY search word appears in the haystack
                 $hit = false;
                 foreach ($words as $w) {
-                    if (mb_strpos($haystack, $w) !== false) { $hit = true; break; }
+                    if (mb_strpos($haystack, $w) !== false) {
+                        $hit = true;
+                        break;
+                    }
                 }
-                if ($hit) $matched[] = $item;
+                if ($hit) {
+                    $filtered[] = $item;
+                }
             }
-            if ($pag->currentPage() >= $pag->lastPage()) break;
-        }
 
-        // ── 3. Score: items matching ALL words rank higher ────────────────────
-        if (count($words) > 1 && count($matched) > 1) {
-            usort($matched, function ($a, $b) use ($words) {
-                $ha = mb_strtolower($a->name . ' ' . $a->slug);
-                $hb = mb_strtolower($b->name . ' ' . $b->slug);
-                $sa = 0; foreach ($words as $w) { if (mb_strpos($ha, $w) !== false) $sa++; }
-                $sb = 0; foreach ($words as $w) { if (mb_strpos($hb, $w) !== false) $sb++; }
-                return $sb <=> $sa;
-            });
-        }
+            if (count($words) > 1 && count($filtered) > 1) {
+                usort($filtered, function ($a, $b) use ($words) {
+                    $ha = mb_strtolower($a->name . ' ' . $a->slug);
+                    $hb = mb_strtolower($b->name . ' ' . $b->slug);
+                    $sa = 0; foreach ($words as $w) { if (mb_strpos($ha, $w) !== false) $sa++; }
+                    $sb = 0; foreach ($words as $w) { if (mb_strpos($hb, $w) !== false) $sb++; }
+                    return $sb <=> $sa;
+                });
+            }
+
+            return $filtered;
+        });
 
         $perPage = 20;
         $total   = count($matched);
-        $items   = array_slice($matched, ($page - 1) * $perPage, $perPage);
+        $items   = array_slice($matched, max(0, ($page - 1) * $perPage), $perPage);
 
         return new LengthAwarePaginator($items, $total, $perPage, $page, [
             'path'     => Paginator::resolveCurrentPath(),
@@ -315,38 +438,19 @@ class AppApiService
 
     public function getHotDeals(?int $storeId = null, int $limit = 42): array
     {
-        $deals = [];
-        for ($p = 1; $p <= 5; $p++) {
-            $pag = $this->getProducts($storeId, $p);
-            if ($pag->count() === 0) break;
-            foreach ($pag->items() as $prod) {
+        $id = $storeId ?? $this->storeId;
+        $cacheKey = "api_hot_deals_{$id}_{$limit}";
+
+        return Cache::remember($cacheKey, $this->cacheTtl, function () use ($id, $limit) {
+            $all = $this->getAllMappedProducts($id);
+            $deals = [];
+            foreach ($all as $prod) {
                 if ($prod->sale_price > 0) {
                     $deals[] = $prod;
-                    if (count($deals) >= $limit) return $deals;
+                    if (count($deals) >= $limit) break;
                 }
             }
-            if ($pag->currentPage() >= $pag->lastPage()) break;
-        }
-        return $deals;
-    }
-
-    public function getProductBySlugId(string $slug, int $id, ?int $storeId = null): ?object
-    {
-        $storeId  = $storeId ?? $this->storeId;
-        $cacheKey = "api_product_{$id}_{$slug}";
-
-        return Cache::remember($cacheKey, $this->cacheTtl, function () use ($slug, $id, $storeId) {
-            for ($p = 1; $p <= 10; $p++) {
-                $pag = $this->getProducts($storeId, $p);
-                if ($pag->count() === 0) break;
-                foreach ($pag->items() as $item) {
-                    if ((int)$item->id === $id || ($slug && $item->slug === $slug)) {
-                        return $item;
-                    }
-                }
-                if ($pag->currentPage() >= $pag->lastPage()) break;
-            }
-            return null;
+            return $deals;
         });
     }
 
@@ -355,45 +459,59 @@ class AppApiService
      */
     public function getRelatedProducts(array $productIds, int $excludeId = 0, ?int $storeId = null): Collection
     {
+        $id = $storeId ?? $this->storeId;
         $ids = collect($productIds)
-            ->map(function ($id) {
-                if (is_array($id)) {
-                    $id = $id['id'] ?? null;
-                } elseif (is_object($id)) {
-                    $id = $id->id ?? null;
+            ->map(function ($pid) {
+                if (is_array($pid)) {
+                    $pid = $pid['id'] ?? null;
+                } elseif (is_object($pid)) {
+                    $pid = $pid->id ?? null;
                 }
 
-                return filter_var($id, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]) ?: null;
+                return filter_var($pid, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]) ?: null;
             })
-            ->filter(fn ($id) => $id !== null && $id !== $excludeId)
+            ->filter(fn ($pid) => $pid !== null && $pid !== $excludeId)
             ->unique()
             ->values();
 
         return $ids
-            ->map(fn (int $id) => $this->getProductBySlugId('', $id, $storeId))
+            ->map(fn (int $pid) => $this->getProductById($pid, $id))
             ->filter()
             ->values();
     }
 
     public function getShippingMethods(?int $storeId = null): array
     {
-        $res = $this->cachedRequest('/api/v1/app/shipping-methods/' . ($storeId ?? $this->storeId));
-        if ($res && !empty($res['success']) && !empty($res['data'])) {
-            return array_map(fn($i) => (object) [
-                'id'       => $i['id'] ?? 1,
-                'store_id' => $i['store_id'] ?? null,
-                'type'     => $i['type'] ?? null,
-                'name'     => $i['name'] ?? $i['text'] ?? 'Standard Shipping',
-                'text'     => $i['name'] ?? $i['text'] ?? 'Standard Shipping',
-                'amount'   => (float) ($i['amount'] ?? 0),
-                'status'   => (int) ($i['status'] ?? 1),
-            ], $res['data']);
+        $id = $storeId ?? $this->storeId;
+        $runtimeKey = "shipping_methods_{$id}";
+        if (isset(self::$runtimeCache[$runtimeKey])) {
+            return self::$runtimeCache[$runtimeKey];
         }
 
-        return [
-            (object) ['id' => 1, 'store_id' => null, 'type' => 'inside_dhaka', 'name' => 'ঢাকার ভিতরে - ৳৭০', 'text' => 'ঢাকার ভিতরে - ৳৭০', 'amount' => 70, 'status' => 1],
-            (object) ['id' => 2, 'store_id' => null, 'type' => 'outside_dhaka', 'name' => 'ঢাকার বাইরে - ৳১৩০', 'text' => 'ঢাকার বাইরে - ৳১৩০', 'amount' => 130, 'status' => 1],
-        ];
+        $cacheKey = "api_shipping_methods_mapped_{$id}";
+
+        $methods = Cache::remember($cacheKey, $this->cacheTtl, function () use ($id) {
+            $res = $this->cachedRequest('/api/v1/app/shipping-methods/' . $id);
+            if ($res && !empty($res['success']) && !empty($res['data'])) {
+                return array_map(fn($i) => (object) [
+                    'id'       => $i['id'] ?? 1,
+                    'store_id' => $i['store_id'] ?? null,
+                    'type'     => $i['type'] ?? null,
+                    'name'     => $i['name'] ?? $i['text'] ?? 'Standard Shipping',
+                    'text'     => $i['name'] ?? $i['text'] ?? 'Standard Shipping',
+                    'amount'   => (float) ($i['amount'] ?? 0),
+                    'status'   => (int) ($i['status'] ?? 1),
+                ], $res['data']);
+            }
+
+            return [
+                (object) ['id' => 1, 'store_id' => null, 'type' => 'inside_dhaka', 'name' => 'ঢাকার ভিতরে - ৳৭০', 'text' => 'ঢাকার ভিতরে - ৳৭০', 'amount' => 70, 'status' => 1],
+                (object) ['id' => 2, 'store_id' => null, 'type' => 'outside_dhaka', 'name' => 'ঢাকার বাইরে - ৳১৩০', 'text' => 'ঢাকার বাইরে - ৳১৩০', 'amount' => 130, 'status' => 1],
+            ];
+        });
+
+        self::$runtimeCache[$runtimeKey] = $methods;
+        return $methods;
     }
 
     public function getShippingMethodAmount($methodId, ?int $storeId = null): float
@@ -406,41 +524,52 @@ class AppApiService
 
     public function getReviews(?int $productId = null, ?int $storeId = null): Collection
     {
-        $storeId = $storeId ?? $this->storeId;
-        $res = $this->cachedRequest("/api/v1/app/reviews/{$storeId}");
-        $items = $res['data'] ?? [];
+        $id = $storeId ?? $this->storeId;
+        $runtimeKey = "reviews_{$id}";
 
-        if (isset($items['data']) && is_array($items['data'])) {
-            $items = $items['data'];
+        if (!isset(self::$runtimeCache[$runtimeKey])) {
+            $cacheKey = "api_reviews_mapped_{$id}";
+            self::$runtimeCache[$runtimeKey] = Cache::remember($cacheKey, $this->cacheTtl, function () use ($id) {
+                $res = $this->cachedRequest("/api/v1/app/reviews/{$id}");
+                $items = $res['data'] ?? [];
+
+                if (isset($items['data']) && is_array($items['data'])) {
+                    $items = $items['data'];
+                }
+
+                return collect(is_array($items) ? $items : [])
+                    ->filter(fn (array $review) => (int) ($review['status'] ?? 1) === 1)
+                    ->map(function (array $review) {
+                        $images = $review['image'] ?? [];
+                        $images = is_array($images) ? $images : (json_decode((string) $images, true) ?: [$images]);
+                        $resolvedImages = array_values(array_filter(array_map(function ($img) {
+                            return $this->resolveMediaUrl($img);
+                        }, (array) $images)));
+
+                        return (object) [
+                            'id'         => $review['id'] ?? null,
+                            'product_id' => $review['product_id'] ?? null,
+                            'name'       => $review['name'] ?? '',
+                            'email'      => $review['email'] ?? null,
+                            'rating'     => (int) ($review['rating'] ?? 0),
+                            'summary'    => $review['summary'] ?? '',
+                            'review'     => $review['summary'] ?? '',
+                            'status'     => (int) ($review['status'] ?? 1),
+                            'image'      => $resolvedImages,
+                            'created_at' => $review['created_at'] ?? null,
+                            'updated_at' => $review['updated_at'] ?? null,
+                        ];
+                    })
+                    ->values();
+            });
         }
 
-        return collect(is_array($items) ? $items : [])
-            ->filter(function (array $review) use ($productId) {
-                return (int) ($review['status'] ?? 1) === 1
-                    && ($productId === null || (int) ($review['product_id'] ?? 0) === $productId);
-            })
-            ->map(function (array $review) {
-                $images = $review['image'] ?? [];
-                $images = is_array($images) ? $images : (json_decode((string) $images, true) ?: [$images]);
-                $resolvedImages = array_values(array_filter(array_map(function ($img) {
-                    return $this->resolveMediaUrl($img);
-                }, (array) $images)));
+        $allReviews = self::$runtimeCache[$runtimeKey];
+        if ($productId !== null) {
+            return $allReviews->filter(fn ($r) => (int) ($r->product_id ?? 0) === $productId)->values();
+        }
 
-                return (object) [
-                    'id'         => $review['id'] ?? null,
-                    'product_id' => $review['product_id'] ?? null,
-                    'name'       => $review['name'] ?? '',
-                    'email'      => $review['email'] ?? null,
-                    'rating'     => (int) ($review['rating'] ?? 0),
-                    'summary'    => $review['summary'] ?? '',
-                    'review'     => $review['summary'] ?? '', // alias for blade compatibility
-                    'status'     => (int) ($review['status'] ?? 1),
-                    'image'      => $resolvedImages,
-                    'created_at' => $review['created_at'] ?? null,
-                    'updated_at' => $review['updated_at'] ?? null,
-                ];
-            })
-            ->values();
+        return $allReviews;
     }
 
     public function clearReviewsCache(?int $storeId = null): bool
@@ -448,13 +577,15 @@ class AppApiService
         $storeId = $storeId ?? $this->storeId;
         Cache::forget('api_' . md5("/api/v1/app/reviews/{$storeId}" . serialize([])));
         Cache::forget('api_' . md5("/api/v1/app/reviews/{$storeId}"));
+        Cache::forget("api_reviews_mapped_{$storeId}");
+        unset(self::$runtimeCache["reviews_{$storeId}"]);
         return true;
     }
 
     /**
-     * Map raw product API response to a simple standard PHP object.
+     * Map raw product API response to a standard PHP object.
      */
-    public function mapProduct(array $item): object
+    public function mapProduct(array $item, array $categoriesById = []): object
     {
         $id      = (int) ($item['id'] ?? 0);
         $sku     = $item['sku'] ?? '';
@@ -466,8 +597,6 @@ class AppApiService
         if (is_string($gallery)) $gallery = json_decode($gallery, true) ?? [];
         $gallery = array_values(array_map(fn($g) => $this->resolveMediaUrl($g), (array) $gallery));
 
-        // The app API may omit the legacy Eloquent relation, or return it as null.
-        // Build the same shape expected by the storefront from categories/category_ids.
         $category = $item['get_category'] ?? null;
         if (is_array($category) && isset($category['category']) && is_array($category['category'])) {
             $category = $category['category'];
@@ -476,16 +605,21 @@ class AppApiService
             $category = $item['categories'][0] ?? null;
         }
         if (!is_array($category) && !empty($catIds)) {
-            foreach ($this->getCategories() as $candidate) {
-                if ((string) $candidate->id === (string) $catIds[0]) {
-                    $category = [
-                        'id' => $candidate->id,
-                        'category_name' => $candidate->name,
-                        'name' => $candidate->name,
-                        'slug' => $candidate->slug,
-                        'image' => $candidate->image,
-                    ];
-                    break;
+            $targetCatId = (string) $catIds[0];
+            if (isset($categoriesById[$targetCatId])) {
+                $category = $categoriesById[$targetCatId];
+            } else {
+                foreach ($this->getCategories() as $candidate) {
+                    if ((string) $candidate->id === $targetCatId) {
+                        $category = [
+                            'id'            => $candidate->id,
+                            'category_name' => $candidate->name,
+                            'name'          => $candidate->name,
+                            'slug'          => $candidate->slug,
+                            'image'         => $candidate->image,
+                        ];
+                        break;
+                    }
                 }
             }
         }
@@ -578,7 +712,6 @@ class AppApiService
                 'name'          => $category['name'] ?? '',
                 'slug'          => $category['slug'] ?? '',
                 'image'         => isset($category['image']) ? $this->resolveMediaUrl($category['image']) : null,
-                // Legacy nested shape: some blade templates use get_category->category->category_name
                 'category'      => (object) [
                     'id'            => $category['id'] ?? null,
                     'category_name' => $category['category_name'] ?? $category['name'] ?? '',
@@ -596,8 +729,6 @@ class AppApiService
     {
         if (!$path) return null;
 
-        // API payloads can contain absolute localhost URLs from the source server.
-        // Keep the path but serve it from the configured API host instead.
         if (Str::startsWith($path, ['http://', 'https://'])) {
             $parts = parse_url($path);
             $host = strtolower($parts['host'] ?? '');
@@ -616,17 +747,11 @@ class AppApiService
         return $this->storeId;
     }
 
-
-
-    /**----------------------------------------------------------------
-     * Recive and store product image upload from API request.
-     * @param \Illuminate\Http\Request $request
-     * @return \Illuminate\Http\JsonResponse
-     * ----------------------------------------------------------------
+    /**
+     * Receive and store product image upload from API request.
      */
     public function uploadProductImage(Request $request)
     {
-        // Log::info($request->all());
         $url = trim($request->input('image_url') ?? '');
         $oldImageUrl = trim($request->input('old_image_url') ?? '');
 
@@ -641,7 +766,6 @@ class AppApiService
                 return response()->json(['error' => 'Invalid image path'], 422);
             }
 
-            // Remove old image if exists
             $removeOldImage = function () use ($oldImageUrl, $path): void {
                 if (!$oldImageUrl) {
                     return;
@@ -658,7 +782,6 @@ class AppApiService
                 }
             };
 
-            // Already exists
             if (is_file(public_path($path))) {
                 $removeOldImage();
                 return response()->json([
@@ -667,20 +790,17 @@ class AppApiService
                 ]);
             }
 
-            // Download
             $res = Http::withoutVerifying()->timeout(15)->get($url);
             if (!$res->successful() || !$res->body()) {
                 return response()->json(['error' => 'Download failed'], 422);
             }
 
-            // Directory
             $dir = dirname($path) !== '.' ? dirname($path) : 'uploads';
             $uploadDir = public_path($dir);
             if (!is_dir($uploadDir)) {
                 mkdir($uploadDir, 0755, true);
             }
 
-            // File name
             $name = basename($path);
             if (!pathinfo($name, PATHINFO_EXTENSION)) {
                 $mime = explode(';', $res->header('Content-Type'))[0] ?? '';

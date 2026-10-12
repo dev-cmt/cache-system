@@ -7,17 +7,24 @@ if (!function_exists('apiCall')) {
 
         // dd($data);
 
+        $methodUpper = strtoupper($method);
+
+        if ($methodUpper === 'GET' && !empty($data)) {
+            $queryString = http_build_query($data);
+            $url .= (strpos($url, '?') === false ? '?' : '&') . $queryString;
+        }
+
         $curl = curl_init();
         $opts = [
             CURLOPT_URL            => $url,
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_TIMEOUT        => 15,
             CURLOPT_FOLLOWLOCATION => true,
-            CURLOPT_CUSTOMREQUEST  => strtoupper($method),
+            CURLOPT_CUSTOMREQUEST  => $methodUpper,
             CURLOPT_HTTPHEADER     => ['Accept: application/json', 'Content-Type: application/json'],
         ];
 
-        if (strtoupper($method) !== 'GET' && !empty($data)) {
+        if ($methodUpper !== 'GET' && !empty($data)) {
             $opts[CURLOPT_POSTFIELDS] = json_encode($data);
         }
 
